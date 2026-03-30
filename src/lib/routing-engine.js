@@ -410,12 +410,14 @@ export function haversine(lat1, lon1, lat2, lon2) {
 // Find nearest stops to a lat/lng
 export function findNearestStops(lat, lng, maxDist = 800, limit = 10) {
   const GRID_SIZE = 0.005;
+  const METERS_PER_DEGREE = 111320;
   const gridLat = Math.floor(lat / GRID_SIZE);
   const gridLng = Math.floor(lng / GRID_SIZE);
+  const gridRadius = Math.ceil(maxDist / (GRID_SIZE * METERS_PER_DEGREE)) + 1;
   const results = [];
 
-  for (let dl = -2; dl <= 2; dl++) {
-    for (let dc = -2; dc <= 2; dc++) {
+  for (let dl = -gridRadius; dl <= gridRadius; dl++) {
+    for (let dc = -gridRadius; dc <= gridRadius; dc++) {
       const key = `${gridLat + dl}_${gridLng + dc}`;
       const cellStops = spatialIndex[key];
       if (!cellStops) continue;
@@ -996,7 +998,9 @@ export function findRoutes(from, to) {
     const sameNameIds = resolvedName ? (nameToStopIds[resolvedName] || [from]) : [from];
     fromStops = sameNameIds.map(id => ({ id, walkTime: 0 }));
   } else {
-    const nearby = findNearestStops(from.lat, from.lng, 1000, 5);
+    let nearby = findNearestStops(from.lat, from.lng, 1000, 5);
+    if (nearby.length === 0) nearby = findNearestStops(from.lat, from.lng, 2500, 5);
+    if (nearby.length === 0) nearby = findNearestStops(from.lat, from.lng, 5000, 3);
     if (nearby.length === 0) return [];
     fromStops = nearby.map(s => ({
       id: s.id,
@@ -1010,7 +1014,9 @@ export function findRoutes(from, to) {
     const sameNameIds = resolvedName ? (nameToStopIds[resolvedName] || [to]) : [to];
     toStops = new Set(sameNameIds);
   } else {
-    const nearby = findNearestStops(to.lat, to.lng, 1000, 5);
+    let nearby = findNearestStops(to.lat, to.lng, 1000, 5);
+    if (nearby.length === 0) nearby = findNearestStops(to.lat, to.lng, 2500, 5);
+    if (nearby.length === 0) nearby = findNearestStops(to.lat, to.lng, 5000, 3);
     if (nearby.length === 0) return [];
     toStops = new Set(nearby.map(s => s.id));
   }
@@ -1102,11 +1108,13 @@ export function findRoutes(from, to) {
   const minXferTag = minXferResult.transfers === 0 ? 'Direct' : 'Recommended';
   addResult(minXferResult, minXferTag);
 
-  // 2. Find FASTEST route — show if meaningfully faster
+  // 2. Find FASTEST route — show if faster (any improvement when same transfers, 15% when more transfers)
   const fastest = _dijkstra(fromStops, toStops);
   if (fastest) {
     const fastestResult = _buildResult(fastest.path, fastest.totalTime);
-    if (fastestResult.totalTime < minXferResult.totalTime * 0.85) {
+    const sameTransfers = fastestResult.transfers === minXferResult.transfers;
+    const threshold = sameTransfers ? 0.999 : 0.85;
+    if (fastestResult.totalTime < minXferResult.totalTime * threshold) {
       addResult(fastestResult, 'Faster');
     }
   }

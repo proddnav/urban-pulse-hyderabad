@@ -76,18 +76,20 @@ async function syncFromFirestore(uid) {
     if (!snap.exists()) return;
     const data = snap.data();
 
-    if (data.recentSearches?.length && !readJSON(RECENT_SEARCHES_KEY).length) {
+    if (data.recentSearches?.length) {
       localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(data.recentSearches));
     }
-    if (data.savedPlaces && !Object.keys(readJSON(SAVED_PLACES_KEY, {})).length) {
+    if (data.savedPlaces && Object.keys(data.savedPlaces).length) {
       localStorage.setItem(SAVED_PLACES_KEY, JSON.stringify(data.savedPlaces));
     }
-    if (data.favoriteRoutes?.length && !readJSON(FAVORITE_ROUTES_KEY).length) {
+    if (data.favoriteRoutes?.length) {
       localStorage.setItem(FAVORITE_ROUTES_KEY, JSON.stringify(data.favoriteRoutes));
     }
-    if (data.favoriteStops?.length && !readJSON(FAVORITE_STOPS_KEY).length) {
+    if (data.favoriteStops?.length) {
       localStorage.setItem(FAVORITE_STOPS_KEY, JSON.stringify(data.favoriteStops));
     }
+    // Notify components that data is ready
+    window.dispatchEvent(new CustomEvent('urbanpulse:synced'));
   } catch {
     // Silent fail
   }
@@ -111,17 +113,20 @@ export function addRecentSearch(from, to) {
 // --- Saved Places ---
 
 export function getSavedPlaces() {
-  return readJSON(SAVED_PLACES_KEY, {})
+  const data = readJSON(SAVED_PLACES_KEY, {})
+  return Array.isArray(data) ? {} : data
 }
 
 export function setSavedPlace(key, stop) {
-  const places = readJSON(SAVED_PLACES_KEY, {})
+  const raw = readJSON(SAVED_PLACES_KEY, {})
+  const places = Array.isArray(raw) ? {} : raw
   places[key] = stop
   writeJSON(SAVED_PLACES_KEY, places)
 }
 
 export function removeSavedPlace(key) {
-  const places = readJSON(SAVED_PLACES_KEY, {})
+  const raw = readJSON(SAVED_PLACES_KEY, {})
+  const places = Array.isArray(raw) ? {} : raw
   delete places[key]
   writeJSON(SAVED_PLACES_KEY, places)
 }

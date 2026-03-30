@@ -6,6 +6,8 @@ import { initializeApp } from 'firebase/app';
 import {
   getAuth,
   GoogleAuthProvider,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
@@ -48,6 +50,12 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+
+// Disable reCAPTCHA in development for easier testing
+if (import.meta.env.DEV) {
+  auth.settings.appVerificationDisabledForTesting = true;
+}
+
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
@@ -78,6 +86,44 @@ export function logout() {
 
 export function onAuth(callback) {
   return onAuthStateChanged(auth, callback);
+}
+
+// --- Phone Auth ---
+
+export async function sendOtp(phoneNumber) {
+  let appVerifier;
+  
+  if (import.meta.env.DEV) {
+    // In dev, use a dummy verifier to bypass reCAPTCHA and billing checks
+    appVerifier = {
+      type: 'recaptcha',
+      verify: async () => 'test-token',
+      render: async () => 'test-widget-id',
+      reset: () => {},
+      _reset: () => {},
+      _verify: async () => 'test-token'
+    };
+  } else {
+    if (window.recaptchaVerifier) {
+      try { window.recaptchaVerifier.clear(); } catch {}
+      window.recaptchaVerifier = null;
+    }
+    window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+      size: 'invisible',
+      callback: () => {},
+    });
+    appVerifier = window.recaptchaVerifier;
+  }
+  
+  const confirmation = await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
+  window.confirmationResult = confirmation;
+  return confirmation;
+}
+
+export async function verifyOtp(otp) {
+  if (!window.confirmationResult) throw new Error('No OTP sent');
+  const result = await window.confirmationResult.confirm(otp);
+  return result.user;
 }
 
 // --- User Profile ---

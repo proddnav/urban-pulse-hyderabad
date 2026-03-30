@@ -1,5 +1,7 @@
 {
-  "projects": {},
+  "projects": {
+    "default": "urban-pulse-hyderabad"
+  },
   "targets": {},
   "etags": {}
 }

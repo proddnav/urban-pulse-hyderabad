@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { findNearestStops, searchStops, getMetroData, getRoutesForStop, getRoute, getStop, getPrecomputedRoute } from '../lib/routing-engine'
+import { findNearestStops, searchStops, searchRouteIndex, getMetroData, getRoutesForStop, getRoute, getStop, getPrecomputedRoute } from '../lib/routing-engine'
 import { getCurrentPosition, formatDistance, formatWalkTime } from '../lib/geo'
 import { getRecentSearches, getSavedPlaces, setSavedPlace, removeSavedPlace } from '../lib/storage'
+import { searchPlacesDebounced, resolvePlaceLatLng } from '../lib/places'
 
 const DEFAULT_LOCATION = { lat: 17.4435, lng: 78.3772 }
 
@@ -22,6 +23,8 @@ export default function Home() {
   const [settingPlace, setSettingPlace] = useState(null) // 'home' | 'work' | null
   const [placeQuery, setPlaceQuery] = useState('')
   const [placeResults, setPlaceResults] = useState([])
+  const [googlePlaceResults, setGooglePlaceResults] = useState([])
+  const [resolvingPlace, setResolvingPlace] = useState(false)
 
   useEffect(() => {
     setRecentSearches(getRecentSearches(3))
@@ -44,13 +47,16 @@ export default function Home() {
     init()
   }, [])
 
+  const [routeResults, setRouteResults] = useState([])
+
   useEffect(() => {
     if (searchQuery.length >= 1) {
-      const results = searchStops(searchQuery)
-      setSearchResults(results)
+      setSearchResults(searchStops(searchQuery))
+      setRouteResults(searchRouteIndex(searchQuery, 5))
       setShowDropdown(true)
     } else {
       setSearchResults([])
+      setRouteResults([])
       setShowDropdown(false)
     }
   }, [searchQuery])
@@ -120,40 +126,65 @@ export default function Home() {
               <span className="material-symbols-outlined">arrow_forward</span>
             </button>
           )}
-          {showDropdown && searchResults.length > 0 && !selectedStop && (
+          {showDropdown && (searchResults.length > 0 || routeResults.length > 0) && !selectedStop && (
             <div className="absolute top-full left-0 right-0 mt-2 bg-surface-container-lowest rounded-xl shadow-lg z-50 max-h-72 overflow-y-auto border border-outline-variant/10">
-              {searchResults.map(stop => {
-                const routes = stop.routes || getRoutesForStop(stop.id)?.slice(0, 4) || []
-                return (
-                  <button
-                    key={stop.id}
-                    className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-surface-container-low transition-colors first:rounded-t-xl last:rounded-b-xl"
-                    onMouseDown={() => handleStopSelect(stop)}
-                  >
-                    <div className="w-9 h-9 rounded-xl bg-surface-container-high flex items-center justify-center flex-shrink-0">
-                      <span className="material-symbols-outlined text-on-surface-variant text-lg">
-                        {stop.metro ? 'train' : 'directions_bus'}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-on-surface text-sm truncate">{stop.name}</div>
-                      <div className="text-xs text-on-surface-variant flex items-center gap-1">
-                        {stop.metro ? (
-                          <span className="text-primary font-medium">{stop.lineName}</span>
-                        ) : stop.zone ? (
-                          <span>{stop.zone}</span>
-                        ) : null}
-                        {routes.length > 0 && (
-                          <>
-                            {(stop.metro || stop.zone) && <span className="opacity-40">·</span>}
-                            <span className="font-medium text-tertiary">{routes.slice(0, 3).join(', ')}</span>
-                          </>
-                        )}
+              {routeResults.length > 0 && (
+                <>
+                  <div className="px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Bus Routes</div>
+                  {routeResults.map(route => (
+                    <button
+                      key={route.id}
+                      className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-surface-container-low transition-colors"
+                      onMouseDown={() => navigate(`/routes?tab=browse&q=${encodeURIComponent(route.name)}`)}
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-tertiary/10 flex items-center justify-center flex-shrink-0">
+                        <span className="material-symbols-outlined text-tertiary text-lg">directions_bus</span>
                       </div>
-                    </div>
-                  </button>
-                )
-              })}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-on-surface text-sm">{route.name}</div>
+                        <div className="text-xs text-on-surface-variant truncate">{route.up?.from || route.down?.from} → {route.up?.to || route.down?.to}</div>
+                      </div>
+                    </button>
+                  ))}
+                </>
+              )}
+              {searchResults.length > 0 && (
+                <>
+                  {routeResults.length > 0 && <div className="px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant border-t border-outline-variant/10">Bus Stops</div>}
+                  {searchResults.map(stop => {
+                    const routes = stop.routes || getRoutesForStop(stop.id)?.slice(0, 4) || []
+                    return (
+                      <button
+                        key={stop.id}
+                        className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-surface-container-low transition-colors first:rounded-t-xl last:rounded-b-xl"
+                        onMouseDown={() => handleStopSelect(stop)}
+                      >
+                        <div className="w-9 h-9 rounded-xl bg-surface-container-high flex items-center justify-center flex-shrink-0">
+                          <span className="material-symbols-outlined text-on-surface-variant text-lg">
+                            {stop.metro ? 'train' : 'directions_bus'}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-on-surface text-sm truncate">{stop.name}</div>
+                          <div className="text-xs text-on-surface-variant flex items-center gap-1">
+                            {stop.metro ? (
+                              <span className="text-primary font-medium">{stop.lineName}</span>
+                            ) : stop.zone ? (
+                              <span>{stop.zone}</span>
+                            ) : null}
+                            {routes.length > 0 && (
+                              <>
+                                {(stop.metro || stop.zone) && <span className="opacity-40">·</span>}
+                                <span className="font-medium text-tertiary">{routes.slice(0, 3).join(', ')}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </>
+              )}
             </div>
           )}
         </div>
@@ -340,7 +371,7 @@ export default function Home() {
               <button
                 key={i}
                 className="w-full text-left bg-surface-container-lowest p-4 rounded-xl flex items-center gap-3 hover:bg-surface-container-low transition-colors"
-                onClick={() => navigate(`/routes?to=${encodeURIComponent(r.to.name)}&toId=${r.to.id}`)}
+                onClick={() => navigate(`/routes?from=${encodeURIComponent(r.from.name)}&fromId=${r.from.id}&to=${encodeURIComponent(r.to.name)}&toId=${r.to.id}`)}
               >
                 <span className="material-symbols-outlined text-outline text-lg">history</span>
                 <div className="flex-1 text-sm">
@@ -355,145 +386,92 @@ export default function Home() {
         </section>
       )}
 
-      {/* Live Arrivals (Metro) */}
-      <section className="mb-8">
-        <div className="flex justify-between items-end mb-4">
-          <h3 className="font-headline text-xl font-bold">Nearby Metro</h3>
-        </div>
-        <div className="space-y-3">
-          {loading ? (
-            <div className="bg-surface-container-lowest p-5 rounded-xl flex items-center justify-center">
-              <span className="text-on-surface-variant text-sm">Locating nearby stations...</span>
-            </div>
-          ) : nearbyMetroStations.length === 0 ? (
-            <div className="bg-surface-container-lowest p-5 rounded-xl flex items-center justify-center">
-              <span className="text-on-surface-variant text-sm">No metro stations within range</span>
-            </div>
-          ) : (
-            nearbyMetroStations.map(station => (
-              <button
-                key={station.id}
-                className="w-full text-left bg-surface-container-lowest p-4 rounded-xl flex items-center gap-4 hover:bg-surface-container-low transition-colors"
-                onClick={() => navigate(`/stops/${station.id}`)}
-              >
-                <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center flex-shrink-0">
-                  <span className="material-symbols-outlined text-white text-2xl">train</span>
-                </div>
-                <div className="flex-grow">
-                  <h4 className="font-bold text-base leading-tight">{station.name}</h4>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="px-2 py-0.5 bg-primary-fixed text-on-primary-fixed text-[10px] font-bold rounded-full">
-                      {station.lineName?.toUpperCase() || 'METRO'}
-                    </span>
-                    <span className="text-on-surface-variant text-xs">{formatDistance(station.distance)}</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-primary font-bold text-lg">{formatWalkTime(station.distance).replace(' walk', '')}</p>
-                  <p className="text-on-surface-variant text-[10px] font-medium">WALK</p>
-                </div>
-              </button>
-            ))
-          )}
-        </div>
-      </section>
-
-      {/* Nearby Buses */}
-      <section className="mb-8">
-        <div className="flex justify-between items-end mb-4">
-          <h3 className="font-headline text-xl font-bold">Nearby Buses</h3>
-        </div>
-        <div className="space-y-3">
-          {loading ? (
-            <div className="bg-surface-container-lowest p-5 rounded-xl flex items-center justify-center">
-              <span className="text-on-surface-variant text-sm">Finding nearby stops...</span>
-            </div>
-          ) : nearbyBusStops.length === 0 ? (
-            <div className="bg-surface-container-lowest p-5 rounded-xl flex items-center justify-center">
-              <span className="text-on-surface-variant text-sm">No bus stops within range</span>
-            </div>
-          ) : (
-            nearbyBusStops.map(stop => {
-              const routes = getRoutesForStop(stop.id)?.slice(0, 4) || []
-              return (
-                <button
-                  key={stop.id}
-                  className="w-full text-left bg-surface-container-lowest p-4 rounded-xl flex items-center gap-4 hover:bg-surface-container-low transition-colors"
-                  onClick={() => navigate(`/stops/${stop.id}`)}
-                >
-                  <div className="w-12 h-12 bg-tertiary rounded-xl flex items-center justify-center flex-shrink-0">
-                    <span className="material-symbols-outlined text-white text-2xl">directions_bus</span>
-                  </div>
-                  <div className="flex-grow min-w-0">
-                    <h4 className="font-bold text-base">{stop.name}</h4>
-                    <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                      {routes.length > 0 ? (
-                        <div className="flex gap-1 flex-wrap">
-                          {routes.map(r => (
-                            <span key={r} className="px-1.5 py-0.5 bg-tertiary/10 text-tertiary text-[10px] font-bold rounded">
-                              {r}
-                            </span>
-                          ))}
-                          {getRoutesForStop(stop.id)?.length > 4 && (
-                            <span className="text-[10px] text-on-surface-variant">+{getRoutesForStop(stop.id).length - 4}</span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-on-surface-variant">{formatDistance(stop.distance)}</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-tertiary font-bold text-lg">{formatWalkTime(stop.distance).replace(' walk', '')}</p>
-                    <span className="inline-block w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span>
-                  </div>
-                </button>
-              )
-            })
-          )}
-        </div>
-      </section>
     </main>
 
     {/* Place search bottom sheet — rendered at root level, above everything */}
     {settingPlace && (
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} onClick={() => { setSettingPlace(null); setPlaceQuery(''); setPlaceResults([]); }} />
-        <div style={{ position: 'relative', width: '100%', maxWidth: '28rem', background: '#f8f9ff', borderRadius: '1.5rem 1.5rem 0 0', padding: '1.5rem', paddingBottom: '2.5rem', maxHeight: '75vh', overflowY: 'auto', animation: 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}><div style={{ width: '2.5rem', height: '0.25rem', borderRadius: '9999px', background: '#ccc' }} /></div>
-          <h3 className="font-headline text-lg font-bold text-on-surface mb-4">
+      <div className="fixed inset-0 z-[9999] flex items-end justify-center sm:items-center">
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { setSettingPlace(null); setPlaceQuery(''); setPlaceResults([]); setGooglePlaceResults([]); }} />
+        <div className="relative w-full max-w-2xl bg-[#f8f9ff] rounded-t-3xl sm:rounded-3xl p-5 pb-8 sm:pb-5 max-h-[85dvh] flex flex-col animate-[slideUp_0.3s_cubic-bezier(0.16,1,0.3,1)] overflow-hidden shadow-2xl">
+          <div className="flex justify-center mb-4 flex-shrink-0">
+            <div className="w-10 h-1 rounded-full bg-outline-variant/30" />
+          </div>
+          <h3 className="font-headline text-lg font-bold text-on-surface mb-4 flex-shrink-0">
             Set {settingPlace === 'home' ? 'Home' : 'Work'} Location
           </h3>
-          <div className="relative mb-3">
+          <div className="relative mb-3 flex-shrink-0">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-outline text-lg">search</span>
             <input
               className="w-full bg-surface-container-low rounded-xl py-3.5 pl-12 pr-4 text-on-surface placeholder:text-outline/60 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-              placeholder="Search for a bus stop..."
+              placeholder="Search any place, stop or area..."
               value={placeQuery}
-              onChange={e => { setPlaceQuery(e.target.value); if (e.target.value.length >= 2) setPlaceResults(searchStops(e.target.value, 10)); else setPlaceResults([]); }}
               autoFocus
+              onChange={e => {
+                const q = e.target.value
+                setPlaceQuery(q)
+                if (q.length >= 1) setPlaceResults(searchStops(q, 6)); else setPlaceResults([])
+                if (q.length >= 3) searchPlacesDebounced(q, setGooglePlaceResults); else setGooglePlaceResults([])
+              }}
             />
           </div>
-          <div className="space-y-1">
-            {placeResults.map(stop => (
-              <button
-                key={stop.id}
-                className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-surface-container-low rounded-xl transition-colors"
-                onClick={() => {
-                  setSavedPlace(settingPlace, { id: stop.id, name: stop.name, lat: stop.lat, lng: stop.lng });
-                  setSavedPlacesState(getSavedPlaces());
-                  setSettingPlace(null); setPlaceQuery(''); setPlaceResults([]);
-                }}
-              >
-                <span className="material-symbols-outlined text-on-surface-variant text-lg">{stop.metro ? 'train' : 'directions_bus'}</span>
-                <div>
-                  <div className="font-semibold text-on-surface text-sm">{stop.name}</div>
-                  {stop.zone && <div className="text-xs text-on-surface-variant">{stop.zone}</div>}
-                </div>
-              </button>
-            ))}
-            {placeQuery.length >= 2 && placeResults.length === 0 && (
-              <p className="text-center text-on-surface-variant text-sm py-4">No stops found</p>
+          <div className="overflow-y-auto flex-1 min-h-0 -mx-2 px-2 scrollbar-hide space-y-0.5">
+            {resolvingPlace && (
+              <div className="flex items-center justify-center py-6 gap-2 text-on-surface-variant text-sm">
+                <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                Locating...
+              </div>
+            )}
+            {!resolvingPlace && placeResults.length > 0 && (
+              <>
+                <div className="px-2 pt-1 pb-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Bus Stops</div>
+                {placeResults.map(stop => (
+                  <button key={stop.id} className="w-full text-left px-3 py-3 flex items-center gap-3 hover:bg-surface-container-low rounded-xl transition-colors active:scale-[0.98]"
+                    onClick={() => {
+                      setSavedPlace(settingPlace, { id: stop.id, name: stop.name, lat: stop.lat, lng: stop.lng })
+                      setSavedPlacesState(getSavedPlaces())
+                      setSettingPlace(null); setPlaceQuery(''); setPlaceResults([]); setGooglePlaceResults([])
+                    }}>
+                    <div className="w-9 h-9 rounded-xl bg-surface-container-high flex items-center justify-center flex-shrink-0">
+                      <span className="material-symbols-outlined text-on-surface-variant text-base">{stop.metro ? 'train' : 'directions_bus'}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-on-surface text-sm truncate">{stop.name}</div>
+                      {stop.zone && <div className="text-xs text-on-surface-variant">{stop.zone}</div>}
+                    </div>
+                  </button>
+                ))}
+              </>
+            )}
+            {!resolvingPlace && googlePlaceResults.length > 0 && (
+              <>
+                <div className={`px-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant ${placeResults.length > 0 ? 'pt-3 border-t border-outline-variant/10 mt-1' : 'pt-1'}`}>Places</div>
+                {googlePlaceResults.map(place => (
+                  <button key={place.id} className="w-full text-left px-3 py-3 flex items-center gap-3 hover:bg-surface-container-low rounded-xl transition-colors active:scale-[0.98]"
+                    onClick={async () => {
+                      setResolvingPlace(true)
+                      const resolved = await resolvePlaceLatLng(place.placeId)
+                      setResolvingPlace(false)
+                      if (!resolved) return
+                      setSavedPlace(settingPlace, { id: place.id, name: resolved.name || place.name, lat: resolved.lat, lng: resolved.lng, isLocation: true })
+                      setSavedPlacesState(getSavedPlaces())
+                      setSettingPlace(null); setPlaceQuery(''); setPlaceResults([]); setGooglePlaceResults([])
+                    }}>
+                    <div className="w-9 h-9 rounded-xl bg-secondary/10 flex items-center justify-center flex-shrink-0">
+                      <span className="material-symbols-outlined text-secondary text-base">location_on</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-on-surface text-sm truncate">{place.name}</div>
+                      <div className="text-xs text-on-surface-variant truncate">{place.fullName}</div>
+                    </div>
+                  </button>
+                ))}
+              </>
+            )}
+            {!resolvingPlace && placeQuery.length >= 2 && placeResults.length === 0 && googlePlaceResults.length === 0 && (
+              <p className="text-center text-on-surface-variant text-sm py-8">No results found</p>
+            )}
+            {!resolvingPlace && placeQuery.length === 0 && (
+              <p className="text-center text-outline text-sm py-8">Start typing to search</p>
             )}
           </div>
         </div>
@@ -504,6 +482,13 @@ export default function Home() {
       @keyframes slideUp {
         from { transform: translateY(100%); }
         to { transform: translateY(0); }
+      }
+      .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+      }
+      .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
       }
     `}</style>
     </>

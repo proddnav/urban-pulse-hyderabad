@@ -4,6 +4,7 @@ import { findRoutes, searchStops, getReachableStopIds, getRoutesForStop, searchR
 import { calculateRouteFare, formatFare } from '../lib/fare'
 import { getCurrentPosition } from '../lib/geo'
 import { getRecentSearches, addRecentSearch, toggleFavoriteRoute, getFavoriteRoutes } from '../lib/storage'
+import { searchPlacesDebounced, resolvePlaceLatLng } from '../lib/places'
 import RouteMap from '../components/RouteMap'
 
 export default function RoutesPage() {
@@ -25,12 +26,22 @@ export default function RoutesPage() {
   const [locating, setLocating] = useState(false)
   const [browseQuery, setBrowseQuery] = useState('')
   const [browseResults, setBrowseResults] = useState([])
+  const [fromPlaces, setFromPlaces] = useState([])
+  const [toPlaces, setToPlaces] = useState([])
   const toInputRef = useRef(null)
   const [favRoutes, setFavRoutes] = useState(() => getFavoriteRoutes())
 
   // Load recents on mount
   useEffect(() => {
     setRecentSearches(getRecentSearches())
+    // Check for tab/browse params
+    const tab = searchParams.get('tab')
+    const q = searchParams.get('q')
+    if (tab === 'browse') {
+      setActiveTab('browse')
+      if (q) setBrowseQuery(q)
+      return
+    }
     // Check if origin/destination was passed via URL params
     const fromName = searchParams.get('from')
     const fromId = searchParams.get('fromId')
@@ -50,11 +61,18 @@ export default function RoutesPage() {
     if (fromQuery.length >= 1 && !fromStop) {
       setFromResults(searchStops(fromQuery))
       setShowFromDropdown(true)
+      if (fromQuery.length >= 3) {
+        searchPlacesDebounced(fromQuery, setFromPlaces)
+      } else {
+        setFromPlaces([])
+      }
     } else if (!fromStop && fromQuery.length === 0) {
       setFromResults([])
+      setFromPlaces([])
       setShowFromDropdown(false)
     } else {
       setFromResults([])
+      setFromPlaces([])
       setShowFromDropdown(false)
     }
   }, [fromQuery, fromStop, recentSearches])
@@ -73,8 +91,14 @@ export default function RoutesPage() {
         setToResults(searchStops(toQuery))
       }
       setShowToDropdown(true)
+      if (toQuery.length >= 3) {
+        searchPlacesDebounced(toQuery, setToPlaces)
+      } else {
+        setToPlaces([])
+      }
     } else {
       setToResults([])
+      setToPlaces([])
       setShowToDropdown(false)
     }
   }, [toQuery, toStop, fromStop])
@@ -95,7 +119,9 @@ export default function RoutesPage() {
     setSearching(true)
     setTimeout(() => {
       try {
-        const results = findRoutes(fromStop.id, toStop.id)
+        const fromArg = fromStop.isLocation ? { lat: fromStop.lat, lng: fromStop.lng } : fromStop.id
+        const toArg = toStop.isLocation ? { lat: toStop.lat, lng: toStop.lng } : toStop.id
+        const results = findRoutes(fromArg, toArg)
         setRoutes(results)
         addRecentSearch(
           { id: fromStop.id, name: fromStop.name, metro: fromStop.metro },
@@ -118,29 +144,54 @@ export default function RoutesPage() {
     setRoutes(null)
   }
 
-  function selectFrom(stop) {
-    setFromStop(stop)
-    setFromQuery(stop.name)
-    setShowFromDropdown(false)
-    // Auto-focus "To" field
+  async function selectFrom(stop) {
+    if (stop.isPlace && stop.placeId && !stop.lat) {
+      setFromQuery(stop.name)
+      setFromPlaces([])
+      setShowFromDropdown(false)
+      const resolved = await resolvePlaceLatLng(stop.placeId)
+      if (!resolved) return
+      const full = { ...stop, lat: resolved.lat, lng: resolved.lng, name: resolved.name }
+      setFromStop(full)
+      setFromQuery(resolved.name)
+    } else {
+      setFromStop(stop)
+      setFromQuery(stop.name)
+      setFromPlaces([])
+      setShowFromDropdown(false)
+    }
     setTimeout(() => toInputRef.current?.focus(), 100)
   }
 
-  function selectTo(stop) {
-    setToStop(stop)
-    setToQuery(stop.name)
-    setShowToDropdown(false)
+  async function selectTo(stop) {
+    if (stop.isPlace && stop.placeId && !stop.lat) {
+      setToQuery(stop.name)
+      setToPlaces([])
+      setShowToDropdown(false)
+      const resolved = await resolvePlaceLatLng(stop.placeId)
+      if (!resolved) return
+      const full = { ...stop, lat: resolved.lat, lng: resolved.lng, name: resolved.name }
+      setToStop(full)
+      setToQuery(resolved.name)
+    } else {
+      setToStop(stop)
+      setToQuery(stop.name)
+      setToPlaces([])
+      setShowToDropdown(false)
+    }
   }
 
   function clearFrom() {
     setFromQuery('')
     setFromStop(null)
+    setFromPlaces([])
     setRoutes(null)
   }
 
   function clearTo() {
     setToQuery('')
     setToStop(null)
+    setToPlaces([])
     setRoutes(null)
   }
 
@@ -175,7 +226,9 @@ export default function RoutesPage() {
     setShowToDropdown(false)
     // Auto-search
     setTimeout(() => {
-      const results = findRoutes(recent.from.id, recent.to.id)
+      const fromArg = recent.from.isLocation ? { lat: recent.from.lat, lng: recent.from.lng } : recent.from.id
+      const toArg = recent.to.isLocation ? { lat: recent.to.lat, lng: recent.to.lng } : recent.to.id
+      const results = findRoutes(fromArg, toArg)
       setRoutes(results)
     }, 50)
   }
@@ -247,12 +300,29 @@ export default function RoutesPage() {
     )
   }
 
+  function PlaceDropdownItem({ place, onSelect }) {
+    return (
+      <button
+        className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-surface-container-low transition-colors first:rounded-t-xl last:rounded-b-xl"
+        onMouseDown={() => onSelect(place)}
+      >
+        <div className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center bg-secondary/10">
+          <span className="material-symbols-outlined text-lg text-secondary">location_on</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-on-surface text-sm truncate">{place.name}</div>
+          <div className="text-xs text-on-surface-variant mt-0.5 truncate">{place.fullName}</div>
+        </div>
+      </button>
+    )
+  }
+
   function gmapsUrl(stop) {
     if (!stop?.lat) return null
     return `https://www.google.com/maps/search/?api=1&query=${stop.lat},${stop.lng}`
   }
 
-  function RouteCard({ route, idx, fromStop, toStop, defaultOpen }) {
+  function RouteCard({ route, idx, fromStop, toStop, defaultOpen, favRoutes, onToggleFavRoute }) {
     const [open, setOpen] = useState(defaultOpen)
     const fare = calculateRouteFare(route.segments)
     const transitSegments = route.segments.filter(s => s.type !== 'walk')
@@ -363,15 +433,21 @@ export default function RoutesPage() {
                 const isLast = si === route.segments.length - 1
 
                 if (seg.type === 'walk') {
+                  const walkDist = Math.round(seg.totalTime * 1.2)
+                  const walkDistStr = walkDist >= 1000 ? `${(walkDist / 1000).toFixed(1)} km` : `${walkDist} m`
+                  const mapsWalkUrl = alight?.lat
+                    ? `https://www.google.com/maps/dir/?api=1&travelmode=walking&destination=${alight.lat},${alight.lng}`
+                    : null
                   return (
                     <div key={si} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-surface-container-high/40 my-1">
                       <span className="material-symbols-outlined text-on-surface-variant text-lg">directions_walk</span>
                       <div className="flex-1 min-w-0 text-sm">
                         <span className="text-on-surface-variant">Walk to </span>
-                        <a href={gmapsUrl(alight)} target="_blank" rel="noopener" className="font-semibold text-on-surface">{alight?.name}</a>
+                        <span className="font-semibold text-on-surface">{alight?.name}</span>
+                        <span className="text-on-surface-variant ml-1">· {walkDistStr}</span>
                       </div>
                       <span className="flex-shrink-0 text-xs font-bold text-on-surface-variant bg-surface-container-highest px-2.5 py-1 rounded-lg">{mins} min</span>
-                      {alight?.lat && <a href={gmapsUrl(alight)} target="_blank" rel="noopener" className="flex-shrink-0 text-primary opacity-50 hover:opacity-100"><span className="material-symbols-outlined text-sm">map</span></a>}
+                      {mapsWalkUrl && <a href={mapsWalkUrl} target="_blank" rel="noopener" className="flex-shrink-0 text-primary opacity-50 hover:opacity-100"><span className="material-symbols-outlined text-sm">map</span></a>}
                     </div>
                   )
                 }
@@ -419,6 +495,12 @@ export default function RoutesPage() {
                           <span className="material-symbols-outlined text-xs">{segmentIcon(seg.type)}</span>
                           {bestRoute}
                           <span className="material-symbols-outlined text-[10px] opacity-50">open_in_new</span>
+                        </button>
+                        <button
+                          onClick={() => onToggleFavRoute(bestRoute)}
+                          className="flex items-center justify-center p-1 active:scale-90 transition-transform"
+                        >
+                          <span className={`material-symbols-outlined text-[16px] ${favRoutes?.includes(bestRoute) ? 'text-primary' : 'text-outline/40'}`} style={{ fontVariationSettings: favRoutes?.includes(bestRoute) ? "'FILL' 1" : "'FILL' 0" }}>star</span>
                         </button>
                         <span className="text-[11px] text-on-surface-variant">{seg.stops.length} stops · {mins} min</span>
                       </div>
@@ -542,13 +624,25 @@ export default function RoutesPage() {
                       )}
                       {showFromDropdown && (
                         <div className="absolute top-full left-0 right-0 mt-2 bg-surface-container-lowest rounded-xl shadow-lg z-50 max-h-64 overflow-y-auto border border-outline-variant/10">
-                          {/* Near me option */}
-                          {fromResults.map(stop => (
-                            <StopDropdownItem key={stop.id} stop={stop} onSelect={selectFrom} />
-                          ))}
-                          {fromQuery.length >= 2 && fromResults.length === 0 && (
+                          {fromResults.length > 0 && (
+                            <>
+                              <div className="px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Bus Stops</div>
+                              {fromResults.map(stop => (
+                                <StopDropdownItem key={stop.id} stop={stop} onSelect={selectFrom} />
+                              ))}
+                            </>
+                          )}
+                          {fromPlaces.length > 0 && (
+                            <>
+                              <div className={`px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant ${fromResults.length > 0 ? 'border-t border-outline-variant/10 mt-1' : ''}`}>Places</div>
+                              {fromPlaces.map(place => (
+                                <PlaceDropdownItem key={place.id} place={place} onSelect={selectFrom} />
+                              ))}
+                            </>
+                          )}
+                          {fromQuery.length >= 2 && fromResults.length === 0 && fromPlaces.length === 0 && (
                             <div className="px-4 py-4 text-center text-on-surface-variant text-sm">
-                              No stops found for "{fromQuery}"
+                              No stops or places found for "{fromQuery}"
                             </div>
                           )}
                         </div>
@@ -575,12 +669,25 @@ export default function RoutesPage() {
                       )}
                       {showToDropdown && (
                         <div className="absolute top-full left-0 right-0 mt-2 bg-surface-container-lowest rounded-xl shadow-lg z-50 max-h-64 overflow-y-auto border border-outline-variant/10">
-                          {toResults.map(stop => (
-                            <StopDropdownItem key={stop.id} stop={stop} onSelect={selectTo} />
-                          ))}
-                          {toQuery.length >= 2 && toResults.length === 0 && (
+                          {toResults.length > 0 && (
+                            <>
+                              <div className="px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Bus Stops</div>
+                              {toResults.map(stop => (
+                                <StopDropdownItem key={stop.id} stop={stop} onSelect={selectTo} />
+                              ))}
+                            </>
+                          )}
+                          {toPlaces.length > 0 && (
+                            <>
+                              <div className={`px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant ${toResults.length > 0 ? 'border-t border-outline-variant/10 mt-1' : ''}`}>Places</div>
+                              {toPlaces.map(place => (
+                                <PlaceDropdownItem key={place.id} place={place} onSelect={selectTo} />
+                              ))}
+                            </>
+                          )}
+                          {toQuery.length >= 2 && toResults.length === 0 && toPlaces.length === 0 && (
                             <div className="px-4 py-4 text-center text-on-surface-variant text-sm">
-                              No stops found for "{toQuery}"
+                              No stops or places found for "{toQuery}"
                             </div>
                           )}
                         </div>
@@ -650,6 +757,8 @@ export default function RoutesPage() {
                     fromStop={fromStop}
                     toStop={toStop}
                     defaultOpen={idx === 0}
+                    favRoutes={favRoutes}
+                    onToggleFavRoute={(routeName) => { toggleFavoriteRoute(routeName); setFavRoutes(getFavoriteRoutes()); }}
                   />
                 ))}
               </>

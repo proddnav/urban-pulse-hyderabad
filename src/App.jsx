@@ -8,6 +8,8 @@ import StopDetail from './pages/StopDetail'
 import Profile from './pages/Profile'
 import Login from './pages/Login'
 import Privacy from './pages/Privacy'
+import Terms from './pages/Terms'
+import Metro from './pages/Metro'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -26,6 +28,7 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
         <Route element={
           <ProtectedRoute>
             <Layout />
@@ -35,6 +38,7 @@ function App() {
           <Route path="/routes" element={<RoutesPage />} />
           <Route path="/routes/detail" element={<RouteDetail />} />
           <Route path="/stops/:stopId" element={<StopDetail />} />
+          <Route path="/metro" element={<Metro />} />
           <Route path="/profile" element={<Profile />} />
         </Route>
       </Routes>
