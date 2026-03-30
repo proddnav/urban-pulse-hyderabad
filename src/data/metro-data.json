@@ -1,0 +1,101 @@
+{
+  "lines": [
+    {
+      "id": "blue",
+      "name": "Blue Line",
+      "color": "#003fb1",
+      "from": "Nagole",
+      "to": "Raidurg",
+      "stations": [
+        {"name": "Nagole", "lat": 17.3652, "lng": 78.5584},
+        {"name": "Uppal", "lat": 17.3988, "lng": 78.5586},
+        {"name": "Survey of India", "lat": 17.4017, "lng": 78.5489},
+        {"name": "NGRI", "lat": 17.4100, "lng": 78.5367},
+        {"name": "Stadium", "lat": 17.4148, "lng": 78.5295},
+        {"name": "Tarnaka", "lat": 17.4228, "lng": 78.5263},
+        {"name": "Mettuguda", "lat": 17.4279, "lng": 78.5199},
+        {"name": "Secunderabad East", "lat": 17.4348, "lng": 78.5101},
+        {"name": "Parade Grounds", "lat": 17.4419, "lng": 78.5034},
+        {"name": "Paradise", "lat": 17.4442, "lng": 78.4923},
+        {"name": "Rasoolpura", "lat": 17.4440, "lng": 78.4836},
+        {"name": "Prakash Nagar", "lat": 17.4444, "lng": 78.4750},
+        {"name": "Begumpet", "lat": 17.4438, "lng": 78.4683},
+        {"name": "Ameerpet", "lat": 17.4372, "lng": 78.4484},
+        {"name": "Madhura Nagar", "lat": 17.4389, "lng": 78.4399},
+        {"name": "Yousufguda", "lat": 17.4335, "lng": 78.4323},
+        {"name": "Road No 5 Jubilee Hills", "lat": 17.4280, "lng": 78.4190},
+        {"name": "Jubilee Hills Check Post", "lat": 17.4255, "lng": 78.4099},
+        {"name": "Peddamma Temple", "lat": 17.4249, "lng": 78.3992},
+        {"name": "Madhapur", "lat": 17.4263, "lng": 78.3918},
+        {"name": "Durgam Cheruvu", "lat": 17.4282, "lng": 78.3844},
+        {"name": "HITEC City", "lat": 17.4313, "lng": 78.3802},
+        {"name": "Raidurg", "lat": 17.4374, "lng": 78.3724}
+      ]
+    },
+    {
+      "id": "red",
+      "name": "Red Line",
+      "color": "#ba0915",
+      "from": "Miyapur",
+      "to": "LB Nagar",
+      "stations": [
+        {"name": "Miyapur", "lat": 17.4966, "lng": 78.3717},
+        {"name": "JNTU College", "lat": 17.4929, "lng": 78.3850},
+        {"name": "KPHB Colony", "lat": 17.4847, "lng": 78.3905},
+        {"name": "Kukatpally", "lat": 17.4849, "lng": 78.4042},
+        {"name": "Balanagar", "lat": 17.4789, "lng": 78.4193},
+        {"name": "Moosapet", "lat": 17.4717, "lng": 78.4274},
+        {"name": "Bharath Nagar", "lat": 17.4661, "lng": 78.4296},
+        {"name": "Erragadda", "lat": 17.4566, "lng": 78.4349},
+        {"name": "ESI Hospital", "lat": 17.4487, "lng": 78.4380},
+        {"name": "SR Nagar", "lat": 17.4437, "lng": 78.4412},
+        {"name": "Ameerpet", "lat": 17.4372, "lng": 78.4484},
+        {"name": "Punjagutta", "lat": 17.4281, "lng": 78.4515},
+        {"name": "Irrum Manzil", "lat": 17.4210, "lng": 78.4558},
+        {"name": "Khairatabad", "lat": 17.4157, "lng": 78.4569},
+        {"name": "Lakdi Ka Pul", "lat": 17.4037, "lng": 78.4650},
+        {"name": "Assembly", "lat": 17.4006, "lng": 78.4701},
+        {"name": "Nampally", "lat": 17.3929, "lng": 78.4700},
+        {"name": "Gandhi Bhavan", "lat": 17.3887, "lng": 78.4720},
+        {"name": "Osmania Medical College", "lat": 17.3821, "lng": 78.4760},
+        {"name": "MG Bus Station", "lat": 17.3780, "lng": 78.4805},
+        {"name": "Malakpet", "lat": 17.3706, "lng": 78.4970},
+        {"name": "New Market", "lat": 17.3660, "lng": 78.5053},
+        {"name": "Musarambagh", "lat": 17.3610, "lng": 78.5128},
+        {"name": "Dilsukhnagar", "lat": 17.3594, "lng": 78.5261},
+        {"name": "Chaitanyapuri", "lat": 17.3562, "lng": 78.5365},
+        {"name": "Victoria Memorial", "lat": 17.3544, "lng": 78.5426},
+        {"name": "LB Nagar", "lat": 17.3497, "lng": 78.5524}
+      ]
+    },
+    {
+      "id": "green",
+      "name": "Green Line",
+      "color": "#005538",
+      "from": "JBS",
+      "to": "MGBS",
+      "stations": [
+        {"name": "JBS Parade Ground", "lat": 17.4526, "lng": 78.5013},
+        {"name": "Secunderabad West", "lat": 17.4419, "lng": 78.4978},
+        {"name": "Gandhi Hospital", "lat": 17.4370, "lng": 78.4949},
+        {"name": "Musheerabad", "lat": 17.4311, "lng": 78.4913},
+        {"name": "RTC X Roads", "lat": 17.4211, "lng": 78.4880},
+        {"name": "Chikkadpally", "lat": 17.4128, "lng": 78.4849},
+        {"name": "Narayanguda", "lat": 17.4011, "lng": 78.4830},
+        {"name": "Sultan Bazaar", "lat": 17.3916, "lng": 78.4820},
+        {"name": "MG Bus Station", "lat": 17.3780, "lng": 78.4805}
+      ]
+    }
+  ],
+  "interchange": [
+    {"station": "Ameerpet", "lines": ["blue", "red"]},
+    {"station": "MG Bus Station", "lines": ["red", "green"]}
+  ],
+  "fares": {
+    "base": 10,
+    "perStation": 5,
+    "max": 60
+  },
+  "operatingHours": {"start": "06:00", "end": "22:00"},
+  "frequency": {"peak": 4, "offPeak": 8}
+}
